@@ -2,11 +2,11 @@
   "name": "move-canvas",
   "private": true,
   "scripts": {
-    "start": "tsx move.ts",
-    "sim": "tsx sim.ts",
+    "start": "tsx src/move.ts",
+    "sim": "tsx src/sim.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "lint:html": "markuplint index.html"
+    "lint:html": "markuplint public/index.html"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

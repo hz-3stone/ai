@@ -52,7 +52,7 @@ const handleMoves = (raw: string): string => {
   return text;
 };
 
-const html = fs.readFileSync(path.join(__dirname, 'index.html'));
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'));
 
 const requestListener = (req: http.IncomingMessage, res: http.ServerResponse): void => {
   if (req.url === '/events') {
