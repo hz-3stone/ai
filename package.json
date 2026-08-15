@@ -1,0 +1,14 @@
+{
+  "name": "move-canvas",
+  "private": true,
+  "scripts": {
+    "start": "tsx move.ts",
+    "sim": "tsx sim.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
