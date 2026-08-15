@@ -9,6 +9,7 @@ WASD/矢印キー・スマホの仮想スティック・HTTP API のいずれか
 - `src/move.ts` — 本体。`circle.ts`/`target.ts`を使い、HTTPサーバー(SSE配信 + `/move` + `/state`)とCLI標準入力の両方を提供する。
 - `public/index.html` — ビューア。SSEで受け取った状態をcanvasに描画し、キーボード/スティック入力を数字(0〜7)に変換して`/move`に送るだけ。
 - `src/sim.ts` — インプロセスモードの例。HTTPを一切介さず`Circle`を直接ループで叩く、高頻度シミュレーション用のエントリポイント。
+- `src/rl/` — 強化学習(Qラーニング)でcircleにターゲットへの移動を学習させる実験コード。詳細は下記「強化学習」を参照。
 
 ## 操作プロトコル
 
@@ -35,6 +36,21 @@ curl -X POST -d "3377" http://localhost:3000/move
 # -> "220,208"
 curl http://localhost:3000/state
 # -> "220,208,102,49"  (cx,cy,tx,ty)
+```
+
+## 強化学習
+
+`src/rl/` に、circleがランダムに出現するターゲットまで自力で移動できるよう学習する、表形式Qラーニングの実験コードがある。
+
+- `src/rl/env.ts` — `Circle`/`Target`を使い、状態(ターゲットとの相対位置を20px単位で離散化)と報酬(距離が縮んだら+、ゴールで+100)を定義する環境。
+- `src/rl/qlearning.ts` — ε-greedyで行動選択し、Q学習の更新式で学習するエージェント。
+- `src/rl/train.ts` — 学習ループ本体。主要なハイパーパラメータ(学習率・割引率・探索率・状態のバケツ幅など)はファイル冒頭にまとまっている。
+- `src/rl/play.ts` — 学習済みQテーブルを使い、実際に動いている`move.ts`サーバーのcircleをHTTP経由で操作する。
+
+```
+npm run train   # 学習を実行し、結果を src/rl/qtable.json に保存する (このファイルはgitignore対象)
+npm start        # 別ターミナルでサーバーを起動しブラウザ/スマホで見る
+npm run play      # 学習済みQテーブルでcircleを自動操作する
 ```
 
 ## チェック

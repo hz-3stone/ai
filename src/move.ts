@@ -1,9 +1,16 @@
 import http from 'http';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import readline from 'readline';
 import { Circle, isDirection } from './circle';
 import { Target } from './target';
+
+try {
+  process.loadEnvFile(); // .env があれば読み込む (無くてもエラーにしない)
+} catch {
+  // .env が無ければ何もしない
+}
 
 class Broadcaster {
   private clients: http.ServerResponse[] = [];
@@ -86,8 +93,24 @@ const requestListener = (req: http.IncomingMessage, res: http.ServerResponse): v
   res.end(html);
 };
 
+// LAN内の別端末(スマホ等)から開くためのIPを探す。.envのHOSTがあればそれを優先する
+const lanIp = (): string | undefined => {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return undefined;
+};
+
+const PORT = Number(process.env.PORT) || 3000;
+
 const server = http.createServer(requestListener);
-server.listen(3000, () => console.log('http://localhost:3000'));
+server.listen(PORT, () => {
+  console.log(`http://localhost:${PORT}`);
+  const ip = process.env.HOST || lanIp();
+  if (ip) console.log(`http://${ip}:${PORT}  (同じWi-Fi内のスマホなどから)`);
+});
 
 // move.ts単体でも動作: ターミナルで 0-7 (連続入力可) + Enter
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
