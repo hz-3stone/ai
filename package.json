@@ -4,6 +4,8 @@
   "scripts": {
     "start": "tsx src/move.ts",
     "sim": "tsx src/sim.ts",
+    "train": "tsx src/rl/train.ts",
+    "play": "tsx src/rl/play.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:html": "markuplint public/index.html"
