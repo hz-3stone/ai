@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 src/rl/qtable.json
+src/rl/training-log.json
