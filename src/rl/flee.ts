@@ -34,8 +34,14 @@ const tick = async (): Promise<void> => {
 console.log(`学習済みエージェント(赤)が ${SERVER} でプレイヤーから逃げます (Ctrl+Cで停止)`);
 
 // 前のtickの完了を待ってから次を予約する自己再帰ループ (setIntervalだとリクエストが積み重なるため)
+let warned = false;
 const loop = async (): Promise<void> => {
-  await tick().catch((err) => console.error(err));
+  await tick().catch((err) => {
+    if (!warned) {
+      warned = true;
+      console.error(`${SERVER} に接続できません。別ターミナルで先に \`npm start\` を実行してください。`, err);
+    }
+  });
   setTimeout(loop, INTERVAL_MS);
 };
 loop();
