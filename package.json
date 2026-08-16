@@ -7,6 +7,7 @@
     "train": "tsx src/rl/train.ts",
     "play": "tsx src/rl/play.ts",
     "chase": "tsx src/rl/chase.ts",
+    "flee": "tsx src/rl/flee.ts",
     "compare": "tsx src/rl/compare.ts",
     "compare:snapshots": "tsx src/rl/compareSnapshots.ts",
     "typecheck": "tsc --noEmit",
