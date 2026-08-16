@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { Circle, type Direction } from '../circle';
-import { relativeState } from './env';
+import { visibleRelativeState } from './env';
 import { QLearningAgent } from './qlearning';
 
-const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4;
+// マップは元の25倍(縦横5倍)。視界は据え置き(visibleRelativeStateのVISIBILITY_HALF)なので、
+// 相手が遠く離れている間は「見えていない」として扱われる
+const WIDTH = 2000, HEIGHT = 2000, R = 20, STEP = 4;
 const TOUCH_DISTANCE = R * 2;
 
 const REL_BUCKET = 40; // 追手との相対位置のバケツ幅。壁の次元が増える分、chase(20)より粗くして状態数を抑える
@@ -35,9 +37,10 @@ const distToWalls = (x: number, y: number): { x: number; y: number } => ({
   y: Math.min(y - R, HEIGHT - R - y),
 });
 
-// 学習(EvadeEnv)と推論(evade.ts)で同じ状態表現を使うための共通関数
+// 学習(EvadeEnv)と推論(evade.ts)で同じ状態表現を使うための共通関数。
+// 相手が視界(VISIBILITY_HALF)の外にいれば "none" になり、遠くの正確な位置は分からない
 export const evadeState = (runnerX: number, runnerY: number, chaserX: number, chaserY: number): string => {
-  const rel = relativeState(chaserX - runnerX, chaserY - runnerY, REL_BUCKET);
+  const rel = visibleRelativeState(chaserX - runnerX, chaserY - runnerY, REL_BUCKET);
   const wall = distToWalls(runnerX, runnerY);
   return `${rel},${wallBucket(wall.x)},${wallBucket(wall.y)}`;
 };
@@ -103,8 +106,10 @@ export class EvadeEnv {
   step = (action: Direction): EvadeStepResult => {
     this.moveRunner(action);
 
-    // 追手は固定方策で「今のrunnerに一番近づく方向」へ動く (chase.tsと同じロジック)
-    const chaserState = relativeState(this.runner.x - this.chaser.x, this.runner.y - this.chaser.y);
+    // 追手も同じ視界制限を受ける固定方策で「今のrunnerに一番近づく方向」へ動く。
+    // runnerが視界外なら"none"になり、qtable.jsonにとって未知の状態なので反応が鈍くなる
+    // (これも視界制限を「検証」する一部。追いかける側の「見失う」挙動は今後のフェーズで改善する)
+    const chaserState = visibleRelativeState(this.runner.x - this.chaser.x, this.runner.y - this.chaser.y);
     this.chaser.move(chaserAgent.chooseAction(chaserState, 0));
 
     const newDistance = this.distance();

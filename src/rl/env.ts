@@ -9,6 +9,16 @@ const BUCKET = 20; // dx,dy をこの幅で離散化する (状態数を絞る�
 export const relativeState = (dx: number, dy: number, bucket: number = BUCKET): string =>
   `${Math.round(dx / bucket)},${Math.round(dy / bucket)}`;
 
+// マップが広くなっても、自分中心のこの半径(px)以内しか見えない、という視界制限。
+// 400x400だった頃の可動範囲と同じ広さの窓にすることで、以前の感覚を保ちつつ
+// 相手が視界外にいる間は状態が爆発しないようにする(範囲外は全部「見えていない」1状態に潰す)
+export const VISIBILITY_HALF = 200;
+
+export const visibleRelativeState = (dx: number, dy: number, bucket: number = BUCKET): string => {
+  if (Math.abs(dx) > VISIBILITY_HALF || Math.abs(dy) > VISIBILITY_HALF) return 'none';
+  return relativeState(dx, dy, bucket);
+};
+
 const STEP_REWARD = -1;
 const GOAL_REWARD = 100;
 const SHAPING_SCALE = 1; // 距離が1px縮む/伸びるごとに与える報酬の大きさ

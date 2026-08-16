@@ -2,43 +2,245 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>丸移動</title>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;align-items:center;justify-content:center}
-canvas{display:block;background:#000;max-width:100vw;max-height:100vh;width:auto;height:auto;object-fit:contain}
-#stick{position:fixed;right:30px;bottom:30px;width:120px;height:120px;border-radius:50%;background:#fff2;touch-action:none}
-#knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:#fff5}
+html,body{margin:0;height:100%;overflow:hidden;background:#e6ddc8}
+canvas{display:block;width:100vw;height:100vh;object-fit:contain;background:#e6ddc8;image-rendering:pixelated}
+#stick{position:fixed;right:16px;bottom:16px;width:130px;height:130px;border-radius:50%;background:#0002;touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;background:#0004}
+
+#menuButton{position:fixed;right:14px;top:14px;width:48px;height:48px;border:none;border-radius:10px;background:#0007;color:#fff;font-size:22px;line-height:48px;padding:0;cursor:pointer}
+#viewMenu{position:fixed;right:14px;top:68px;display:none;flex-direction:column;gap:6px;background:#0007;padding:8px;border-radius:10px}
+#viewMenu.open{display:flex}
+#viewMenu button{font:inherit;font-size:15px;padding:12px 16px;min-height:44px;border:none;border-radius:8px;background:#fff2;color:#fff;cursor:pointer;text-align:right}
+#viewMenu button[aria-pressed="true"]{background:#7fc4e8;color:#1a1a1a}
+
 h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 </style>
 </head>
 <body>
 <h1>丸移動</h1>
 <canvas id="c"></canvas>
+<button id="menuButton" type="button" aria-expanded="false" aria-label="視点メニュー">&#9776;</button>
+<div id="viewMenu">
+  <button id="viewPlayer" type="button" aria-pressed="true">青視点</button>
+  <button id="viewEnemy" type="button" aria-pressed="false">赤視点</button>
+  <button id="viewOverview" type="button" aria-pressed="false">俯瞰</button>
+</div>
 <div id="stick"><div id="knob"></div></div>
 <script>
-// move.ts の固定値と同じ (w,h,r は変化しないので毎回は送られてこない)
-const W = 400, H = 400, R = 20;
+// move.ts の固定値と同じ。マップは可動範囲全体、キャンバスは見える窓(カメラ視点)のサイズ
+const MAP_W = 2000, MAP_H = 2000, VIEW_W = 400, VIEW_H = 400, R = 20;
+const CAMERA_LAG = 0.1; // 追従カメラが目標に近づく割合 (毎フレーム)
 
 const cv = document.getElementById('c');
-cv.width = W;
-cv.height = H;
+cv.width = VIEW_W;
+cv.height = VIEW_H;
 const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false; // ぼかさず、あえてドット絵っぽいくっきりした見た目にする
 
-// move.ts から届く "cx,cy,tx,ty" をそのまま描画するだけ
+// 床のヘリンボーン(杉綾)模様を1回だけ生成し、パターンとして使い回す。
+// 色はキャラの色(青#2a78d6・赤#c73e3e)とのコントラスト比3:1以上、色弱シミュレーションでも
+// 見分けがつくことをdataviz skillのvalidate_palette.jsで確認済みの組み合わせ
+const FLOOR_BASE = '#e6ddc8';
+const PLANK_FILL = '#e1d7bc';
+const PLANK_LINE = '#cfc4a3';
+const UNIT = 24; // 板1枚分のサイズ
+
+const tileCanvas = document.createElement('canvas');
+tileCanvas.width = tileCanvas.height = UNIT * 2;
+const tctx = tileCanvas.getContext('2d');
+tctx.fillStyle = FLOOR_BASE;
+tctx.fillRect(0, 0, UNIT * 2, UNIT * 2);
+
+const plank = (cx, cy, deg) => {
+  tctx.save();
+  tctx.translate(cx, cy);
+  tctx.rotate((deg * Math.PI) / 180);
+  tctx.beginPath();
+  tctx.rect(-UNIT * 0.72, -UNIT * 0.34, UNIT * 1.44, UNIT * 0.68);
+  tctx.fillStyle = PLANK_FILL;
+  tctx.fill();
+  tctx.strokeStyle = PLANK_LINE;
+  tctx.lineWidth = 1.5;
+  tctx.stroke();
+  tctx.restore();
+};
+// 45度/-45度の板を交互に配置して杉綾(ヘリンボーン)模様にする
+plank(UNIT * 0.5, UNIT * 0.5, 45);
+plank(UNIT * 1.5, UNIT * 0.5, -45);
+plank(UNIT * 0.5, UNIT * 1.5, -45);
+plank(UNIT * 1.5, UNIT * 1.5, 45);
+
+const floorPattern = ctx.createPattern(tileCanvas, 'repeat');
+
+// move.ts から届く "px,py,ex,ey" を保持するだけ。描画はrequestAnimationFrame側で行う
+let px = MAP_W / 2, py = MAP_H / 2, ex = px, ey = py;
 new EventSource('/events').onmessage = e => {
-  const [x, y, tx, ty] = e.data.split(',');
-  ctx.clearRect(0, 0, W, H);
+  [px, py, ex, ey] = e.data.split(',').map(Number);
+};
 
+// 追従カメラ(青視点/赤視点)は「動き続けている間はデッドゾーンの端に留まり続け、
+// 止まった/向きを変えた瞬間だけゆっくり中央に戻る」方式。マップ端でクランプする
+const CAMERA_DEAD_ZONE = 60; // 動き続けている間、画面中心からこの半径だけキャラがズレていても中央には戻さない
+const CAMERA_CATCH_LAG = 0.3; // デッドゾーンの外に出そうなとき、はみ出さない程度に追いつく速さ
+const CAMERA_RECENTER_LAG = 0.012; // 止まった/向きを変えたときに、じわーっと中央へ戻る速さ
+const STOP_TIMEOUT = 150; // これだけ位置が変わらなければ「止まった」とみなす(ms)
+
+let camX = px, camY = py;
+let prevTargetX = px, prevTargetY = py;
+let prevDirX = 0, prevDirY = 0; // 直前に有効だった移動方向(逆転検知用)
+let lastMoveTime = performance.now();
+let recentering = false;
+let viewMode = 'player'; // 'player' | 'enemy' | 'overview'
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+// 影 + ベタ塗りの本体(パステルカラー) + 大きめの目、でキャラクターらしくする。
+// グラデーションは古臭く見えるので使わない。白目は無くし、瞳を大きく・中央寄りにして
+// 小さなハイライトを添える
+const drawCharacter = (x, y, r, color) => {
   ctx.beginPath();
-  ctx.arc(+tx, +ty, R, 0, Math.PI * 2);
-  ctx.fillStyle = '#ff5252';
+  ctx.ellipse(x, y + r * 0.65, r * 0.8, r * 0.26, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fill();
 
   ctx.beginPath();
-  ctx.arc(+x, +y, R, 0, Math.PI * 2);
-  ctx.fillStyle = '#4fc3f7';
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  for (const dx of [-0.36, 0.36]) {
+    const eyeX = x + r * dx;
+    const eyeY = y - r * 0.02;
+    ctx.beginPath();
+    ctx.arc(eyeX, eyeY, r * 0.34, 0, Math.PI * 2);
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(eyeX - r * 0.11, eyeY - r * 0.11, r * 0.11, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+  }
+};
+
+const drawDot = (x, y, r, color) => {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
   ctx.fill();
 };
+
+const draw = () => {
+  ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+
+  if (viewMode === 'overview') {
+    ctx.fillStyle = FLOOR_BASE;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const scale = VIEW_W / MAP_W;
+    drawDot(ex * scale, ey * scale, Math.max(2, R * scale), '#c73e3e');
+    drawDot(px * scale, py * scale, Math.max(2, R * scale), '#2a78d6');
+  } else {
+    const targetX = viewMode === 'enemy' ? ex : px;
+    const targetY = viewMode === 'enemy' ? ey : py;
+
+    // 直前フレームとの差分だけでなく「動いた方向が前と同じか」を見る。
+    // SSEの更新頻度はrAFより低いので差分0のフレームは無視し、STOP_TIMEOUT経過して
+    // 初めて「止まった」と判定する(そうしないと毎フレーム誤判定してしまう)
+    const vx = targetX - prevTargetX;
+    const vy = targetY - prevTargetY;
+    const now = performance.now();
+    if (vx !== 0 || vy !== 0) {
+      const dirX = vx > 0 ? 1 : vx < 0 ? -1 : 0;
+      const dirY = vy > 0 ? 1 : vy < 0 ? -1 : 0;
+      recentering =
+        (dirX !== 0 && prevDirX !== 0 && dirX !== prevDirX) ||
+        (dirY !== 0 && prevDirY !== 0 && dirY !== prevDirY);
+      if (dirX !== 0) prevDirX = dirX;
+      if (dirY !== 0) prevDirY = dirY;
+      lastMoveTime = now;
+    } else if (now - lastMoveTime > STOP_TIMEOUT) {
+      recentering = true;
+    }
+    prevTargetX = targetX;
+    prevTargetY = targetY;
+
+    if (recentering) {
+      // 止まった/向きを変えた: ゆっくり中央へ戻す
+      camX += (targetX - camX) * CAMERA_RECENTER_LAG;
+      camY += (targetY - camY) * CAMERA_RECENTER_LAG;
+    } else {
+      // 動き続けている: デッドゾーンの中では中央に戻さず、はみ出しそうな分だけ追いつく
+      const dx = targetX - camX;
+      const dy = targetY - camY;
+      if (Math.abs(dx) > CAMERA_DEAD_ZONE) {
+        camX += (dx - Math.sign(dx) * CAMERA_DEAD_ZONE) * CAMERA_CATCH_LAG;
+      }
+      if (Math.abs(dy) > CAMERA_DEAD_ZONE) {
+        camY += (dy - Math.sign(dy) * CAMERA_DEAD_ZONE) * CAMERA_CATCH_LAG;
+      }
+    }
+    camX = clamp(camX, VIEW_W / 2, MAP_W - VIEW_W / 2);
+    camY = clamp(camY, VIEW_H / 2, MAP_H - VIEW_H / 2);
+    const offsetX = camX - VIEW_W / 2;
+    const offsetY = camY - VIEW_H / 2;
+
+    // 床パターンをワールド座標に合わせてずらして描く(カメラが動くと床も流れて見える)
+    ctx.save();
+    ctx.translate(-offsetX, -offsetY);
+    ctx.fillStyle = floorPattern;
+    ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
+    ctx.restore();
+
+    drawCharacter(ex - offsetX, ey - offsetY, R, '#c73e3e');
+    drawCharacter(px - offsetX, py - offsetY, R, '#2a78d6');
+  }
+
+  requestAnimationFrame(draw);
+};
+requestAnimationFrame(draw);
+
+const menuButton = document.getElementById('menuButton');
+const viewMenu = document.getElementById('viewMenu');
+const viewButtons = {
+  player: document.getElementById('viewPlayer'),
+  enemy: document.getElementById('viewEnemy'),
+  overview: document.getElementById('viewOverview'),
+};
+
+const closeMenu = () => {
+  viewMenu.classList.remove('open');
+  menuButton.setAttribute('aria-expanded', 'false');
+};
+menuButton.addEventListener('click', () => {
+  const open = viewMenu.classList.toggle('open');
+  menuButton.setAttribute('aria-expanded', String(open));
+});
+
+const setViewMode = (mode) => {
+  viewMode = mode;
+  if (mode !== 'overview') {
+    // 視点切り替え時は、離れた地点へゆっくりパンしてしまわないよう即座にスナップする
+    const targetX = mode === 'enemy' ? ex : px;
+    const targetY = mode === 'enemy' ? ey : py;
+    camX = targetX;
+    camY = targetY;
+    prevTargetX = targetX;
+    prevTargetY = targetY;
+    prevDirX = 0;
+    prevDirY = 0;
+    recentering = false;
+    lastMoveTime = performance.now();
+  }
+  for (const [key, btn] of Object.entries(viewButtons)) {
+    btn.setAttribute('aria-pressed', String(key === mode));
+  }
+  closeMenu();
+};
+viewButtons.player.addEventListener('click', () => setViewMode('player'));
+viewButtons.enemy.addEventListener('click', () => setViewMode('enemy'));
+viewButtons.overview.addEventListener('click', () => setViewMode('overview'));
 
 // 押している上下左右キーの組み合わせを 0~7 の1コードに変換して move.ts に送るだけ
 const held = new Set();

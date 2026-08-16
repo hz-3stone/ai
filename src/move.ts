@@ -29,8 +29,8 @@ class Broadcaster {
   };
 }
 
-// 固定の可動範囲 (画面サイズに依存しない)
-const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4, MIN_DISTANCE = 200;
+// 固定の可動範囲 (画面サイズに依存しない)。マップは元の25倍(縦横5倍)。
+const WIDTH = 2000, HEIGHT = 2000, R = 20, STEP = 4, MIN_DISTANCE = 1000;
 const TOUCH_DISTANCE = R * 2; // 円同士の半径がぶつかる距離
 
 const player = new Circle(WIDTH, HEIGHT, R, STEP); // 青: プレイヤー操作 (HTML/POST /move)
