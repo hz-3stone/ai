@@ -1,4 +1,4 @@
-export class Target {
+export class SpawnPoint {
   x: number;
   y: number;
 
