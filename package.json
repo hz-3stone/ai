@@ -10,6 +10,7 @@
     "train:evade": "tsx src/rl/trainEvade.ts",
     "evade": "tsx src/rl/evade.ts",
     "train:chase": "tsx src/rl/trainChase.ts",
+    "train:chase-focused": "tsx src/rl/trainChaseFocused.ts",
     "compare": "tsx src/rl/compare.ts",
     "compare:snapshots": "tsx src/rl/compareSnapshots.ts",
     "typecheck": "tsc --noEmit",

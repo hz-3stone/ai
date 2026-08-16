@@ -46,6 +46,7 @@ export class ChaseEnv {
   private speedMin = 1;
   private speedMax = 1;
   private moveBudget = 0; // 端数の移動量を積み立てておき、小数倍の速さも表現する
+  private nearWallProbability = 0; // この確率でchaserの各軸を壁際からスタートさせる (苦手パターンの重点学習用)
 
   constructor() {
     this.placeRandom();
@@ -58,11 +59,28 @@ export class ChaseEnv {
     this.speedMax = max;
   };
 
+  // x軸・y軸それぞれ独立にこの確率で壁際スタートになる。両軸とも壁際になれば角スタート。
+  // 全体を万遍なく学習させたいのでデフォルトは0(完全ランダム)のまま
+  setChaserNearWallProbability = (probability: number): void => {
+    this.nearWallProbability = probability;
+  };
+
+  private randomAxis = (size: number): number => R + Math.random() * (size - R * 2);
+
+  private nearWallAxis = (size: number): number => {
+    const side = Math.random() < 0.5 ? R : size - R; // どちらの壁に寄せるか
+    const jitter = (Math.random() - 0.5) * 80; // 壁から±40pxくらいの範囲でばらける
+    return Math.min(size - R, Math.max(R, side + jitter));
+  };
+
+  private chaserAxis = (size: number): number =>
+    Math.random() < this.nearWallProbability ? this.nearWallAxis(size) : this.randomAxis(size);
+
   private placeRandom = (): void => {
-    this.chaser.x = R + Math.random() * (WIDTH - R * 2);
-    this.chaser.y = R + Math.random() * (HEIGHT - R * 2);
-    this.evader.x = R + Math.random() * (WIDTH - R * 2);
-    this.evader.y = R + Math.random() * (HEIGHT - R * 2);
+    this.chaser.x = this.chaserAxis(WIDTH);
+    this.chaser.y = this.chaserAxis(HEIGHT);
+    this.evader.x = this.randomAxis(WIDTH);
+    this.evader.y = this.randomAxis(HEIGHT);
     this.prevDistance = this.distance();
     this.moveBudget = 0;
     this.evaderSpeedRatio = this.speedMin + Math.random() * (this.speedMax - this.speedMin);
