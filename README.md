@@ -48,14 +48,30 @@ curl http://localhost:3000/state
 - `src/rl/qlearning.ts` — ε-greedyで行動選択し、Q学習の更新式で学習するエージェント。
 - `src/rl/train.ts` — 学習ループ本体。主要なハイパーパラメータ(学習率・割引率・探索率・状態のバケツ幅など)はファイル冒頭にまとまっている。
 - `src/rl/play.ts` — 学習済みQテーブルを使い、実際に動いている`move.ts`サーバーの青(player)をHTTP経由で操作する。
-- `src/rl/chase.ts` — 同じ学習済みQテーブルを流用し、赤(enemy)に青(player)を追いかけさせる。このQテーブルは「静止したターゲットに近づく」ために学習したものであり、動くプレイヤーを追いかける訓練はしていない。そのままでどう動くかを見るための実験。
+
+### 鬼ごっこ (自己対戦)
+
+赤(enemy)が青(player)を追いかけ続ける鬼ごっこを強化学習で作る実験。同じ速さの相手を追う/逃げるのは(この盤面サイズだと)ほぼ不可能に近いことが分かったため、学習は「evader(逃げる側)を大幅に速くする」ところから始め、育ったevaderを固定相手にchaser(追う側)を鍛え直す、という**交互の自己対戦**で両方のQテーブルを育てている。
+
+- `src/rl/evadeEnv.ts` — 2体の`Circle`(runner/chaser)を使う環境。状態は「追手との相対位置」+「上下左右の壁までの距離」。壁までの距離を状態に含めないと、壁際に追い詰められた状況を区別できず簡単に捕まってしまうことが分かったため。壁1pxに近づくごとの小さな減点も加えている(角は2軸分になるのでより不利)。追手(chaser)側の動きは学習済みの`chase`方策を固定で使う
+- `src/rl/trainEvade.ts` — evaderの学習ループ。`SPEED_START`/`SPEED_END`でrunner(青)の速さをchaserの何倍にするか設定できる(カリキュラム学習にも、固定速度での学習にも使える)
+- `src/rl/evade.ts` — 学習済みevadeQtable.jsonで青(player)を操作し、赤から逃げさせる
+- `src/rl/chaseEnv.ts` — evadeEnv.tsと対称の環境。evadeStateは「自分の壁との距離+相手との相対位置」という幾何学的に対称な計算なので、chaser視点でもそのまま使い回せる。evader側の動きは学習済みの`evade`方策を固定で使う
+- `src/rl/trainChase.ts` — chaserの学習ループ。固定相手にした`evadeQtable.json`をどれだけの速さ倍率で使うか設定できる
+- `src/rl/chase.ts` — 学習済みchaseQtable.jsonで赤(enemy)を操作し、青を追いかけさせる
 
 ```
-npm run train   # 学習を実行し、結果を src/rl/qtable.json に保存する (このファイルはgitignore対象)
-npm start        # 別ターミナルでサーバーを起動しブラウザ/スマホで見る
-npm run play      # 学習済みQテーブルで青(player)を自動操作する
-npm run chase     # 学習済みQテーブルで赤(enemy)に青を追いかけさせる (キーボード/スティックで青を操作しながら試せる)
+npm run train         # 「静止ターゲットに近づく」基礎方策を学習し qtable.json に保存 (このファイルはgitignore対象)
+npm start              # 別ターミナルでサーバーを起動しブラウザ/スマホで見る
+npm run play            # 学習済みQテーブルで青(player)を自動操作する
+
+npm run train:evade    # qtable.jsonのchaserを固定相手に、逃げるAIを学習し evadeQtable.json に保存
+npm run evade           # 学習済みevadeQtable.jsonで青(player)に赤から逃げさせる
+npm run train:chase    # evadeQtable.jsonのevaderを固定相手に、追いかけるAIを学習し chaseQtable.json に保存
+npm run chase           # 学習済みchaseQtable.jsonで赤(enemy)に青を追いかけさせる
 ```
+
+`npm run chase`と`npm run evade`を別ターミナルで同時に動かすと、実際に鬼ごっこが見られる。
 
 ## チェック
 

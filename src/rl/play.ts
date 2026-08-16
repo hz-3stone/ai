@@ -31,8 +31,14 @@ console.log(`学習済みエージェントが ${SERVER} のcircleを操作し�
 
 // setIntervalだと前回のtickが終わる前に次が発火し、通信が詰まった際にリクエストが
 // 無限に積み重なってしまう。前のtickの完了を待ってから次を予約する自己再帰ループにする。
+let warned = false;
 const loop = async (): Promise<void> => {
-  await tick().catch((err) => console.error(err));
+  await tick().catch((err) => {
+    if (!warned) {
+      warned = true;
+      console.error(`${SERVER} に接続できません。別ターミナルで先に \`npm start\` を実行してください。`, err);
+    }
+  });
   setTimeout(loop, INTERVAL_MS);
 };
 loop();
