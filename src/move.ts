@@ -31,33 +31,37 @@ class Broadcaster {
 
 // 固定の可動範囲 (画面サイズに依存しない)
 const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4, MIN_DISTANCE = 200;
-const TOUCH_DISTANCE = R * 2; // 円同士の半径がぶつかる距離
 
-const circle = new Circle(WIDTH, HEIGHT, R, STEP);
-const target = new Target(WIDTH, HEIGHT, R);
-target.randomize(circle.x, circle.y, MIN_DISTANCE); // 起動時: 現在地から一定以上離れた場所に出現
+const player = new Circle(WIDTH, HEIGHT, R, STEP); // 青: プレイヤー操作 (HTML/POST /move)
+const enemy = new Circle(WIDTH, HEIGHT, R, STEP); // 赤: AI/CLI操作 (POST /move-enemy。HTMLからは操作できない)
+
+// enemyの初期位置だけ、プレイヤーから離れた場所にする (Targetの配置ルールを流用)
+{
+  const spawn = new Target(WIDTH, HEIGHT, R);
+  spawn.randomize(player.x, player.y, MIN_DISTANCE);
+  enemy.x = spawn.x;
+  enemy.y = spawn.y;
+}
 
 const broadcaster = new Broadcaster();
 
-const touching = (): boolean =>
-  Math.hypot(circle.x - target.x, circle.y - target.y) <= TOUCH_DISTANCE;
-
-// "cx,cy,tx,ty" の4値だけの軽量表現
-const state = (): string => `${circle.toText()},${target.toText()}`;
+// "px,py,ex,ey" の4値だけの軽量表現
+const state = (): string => `${player.toText()},${enemy.toText()}`;
 
 // raw は "3" のような単発でも "3377..." のようなバッチでもよい。
 // 不正な文字は無視するだけで、1リクエストにまとめるほど通信回数が減って軽くなる。
-const handleMoves = (raw: string): string => {
+const makeMoveHandler = (mover: Circle) => (raw: string): string => {
   for (let i = 0; i < raw.length; i++) {
     const dir = raw[i];
-    if (!isDirection(dir)) continue;
-    circle.move(dir);
-    if (touching()) target.randomize(circle.x, circle.y, MIN_DISTANCE); // 触れたら初回生成時と同じルールで再配置
+    if (isDirection(dir)) mover.move(dir);
   }
   const text = state();
   broadcaster.send(text);
   return text;
 };
+
+const handlePlayerMove = makeMoveHandler(player);
+const handleEnemyMove = makeMoveHandler(enemy);
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'));
 
@@ -84,7 +88,18 @@ const requestListener = (req: http.IncomingMessage, res: http.ServerResponse): v
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end(handleMoves(body.trim()));
+      res.end(handlePlayerMove(body.trim()));
+    });
+    return;
+  }
+
+  // 赤(enemy)専用。HTMLからは呼ばれない。CLI/AIスクリプト経由でのみ操作する
+  if (req.url === '/move-enemy' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(handleEnemyMove(body.trim()));
     });
     return;
   }
@@ -112,6 +127,6 @@ server.listen(PORT, () => {
   if (ip) console.log(`http://${ip}:${PORT}  (同じWi-Fi内のスマホなどから)`);
 });
 
-// move.ts単体でも動作: ターミナルで 0-7 (連続入力可) + Enter
+// move.ts単体でも動作: ターミナルで 0-7 (連続入力可) + Enter (青を操作する)
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-rl.on('line', (input) => handleMoves(input.trim()));
+rl.on('line', (input) => handlePlayerMove(input.trim()));
