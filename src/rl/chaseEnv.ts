@@ -4,7 +4,8 @@ import { Circle, type Direction } from '../circle';
 import { evadeState } from './evadeEnv';
 import { QLearningAgent } from './qlearning';
 
-const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4;
+// マップは元の25倍(縦横5倍)。視界制限はevadeState(evadeEnv.ts)を経由して自動的に効く
+const WIDTH = 2000, HEIGHT = 2000, R = 20, STEP = 4;
 const TOUCH_DISTANCE = R * 2;
 
 const CATCH_REWARD = 100;
