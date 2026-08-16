@@ -1,5 +1,5 @@
 import { Circle, type Direction } from '../circle';
-import { Target } from '../target';
+import { SpawnPoint } from '../spawnPoint';
 
 const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4, MIN_DISTANCE = 200;
 const TOUCH_DISTANCE = R * 2;
@@ -19,10 +19,10 @@ export interface StepResult {
   done: boolean;
 }
 
-// Circle/Target をそのまま使い、Qラーニング用に「状態」と「報酬」を定義するだけの薄いラッパー
+// Circle/SpawnPoint をそのまま使い、Qラーニング用に「状態」と「報酬」を定義するだけの薄いラッパー
 export class Env {
   private circle = new Circle(WIDTH, HEIGHT, R, STEP);
-  private target = new Target(WIDTH, HEIGHT, R);
+  private target = new SpawnPoint(WIDTH, HEIGHT, R); // ゴール地点として使う
   private prevDistance = 0;
 
   constructor() {
