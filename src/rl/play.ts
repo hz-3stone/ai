@@ -5,12 +5,14 @@ import { relativeState } from './env';
 
 // 学習済みQテーブルを使って、動いている move.ts サーバーの circle を実際に動かす。
 // 事前に `npm start` でサーバーを立ち上げ、ブラウザで http://localhost:3000 を開いておくこと。
+// 第1引数でQテーブルのパスを指定できる (省略時は qtable.json)。例: npm run play -- src/rl/snapshots/alpha-0.5-ep300.json
 const SERVER = 'http://localhost:3000';
 const INTERVAL_MS = 100;
 
-const qtablePath = path.join(__dirname, 'qtable.json');
+const qtablePath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, 'qtable.json');
 const qtable = JSON.parse(fs.readFileSync(qtablePath, 'utf8'));
 const agent = QLearningAgent.fromJSON(qtable);
+console.log(`Qテーブル: ${qtablePath}`);
 
 const parseState = (text: string) => {
   const [cx, cy, tx, ty] = text.split(',').map(Number);
@@ -26,6 +28,11 @@ const tick = async (): Promise<void> => {
 };
 
 console.log(`学習済みエージェントが ${SERVER} のcircleを操作します (Ctrl+Cで停止)`);
-setInterval(() => {
-  tick().catch((err) => console.error(err));
-}, INTERVAL_MS);
+
+// setIntervalだと前回のtickが終わる前に次が発火し、通信が詰まった際にリクエストが
+// 無限に積み重なってしまう。前のtickの完了を待ってから次を予約する自己再帰ループにする。
+const loop = async (): Promise<void> => {
+  await tick().catch((err) => console.error(err));
+  setTimeout(loop, INTERVAL_MS);
+};
+loop();
