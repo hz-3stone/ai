@@ -6,9 +6,10 @@ import { evadeState } from './evadeEnv';
 // 学習済みの「逃げるAI」で青(player)を操作する。赤(enemy)は別途 `npm run chase` などで
 // 動かしておくこと。学習時と同じ速さ倍率を再現するため、選んだ方向を複数回まとめて
 // POST /move する (move.tsの複数文字バッチをそのまま利用)。
+// 使い方: npm run evade -- [qtableのパス] [速さ倍率(整数、学習時のSPEED_ENDと揃える)]
 const SERVER = 'http://localhost:3000';
 const INTERVAL_MS = 100;
-const SPEED_RATIO = 7; // 学習時と合わせる (整数のみ対応。trainEvade.tsのSPEED_ENDと揃えること)
+const SPEED_RATIO = process.argv[3] ? Number(process.argv[3]) : 2;
 
 const qtablePath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, 'evadeQtable.json');
 const qtable = JSON.parse(fs.readFileSync(qtablePath, 'utf8'));
@@ -28,7 +29,7 @@ const tick = async (): Promise<void> => {
   await fetch(`${SERVER}/move`, { method: 'POST', body: action.repeat(SPEED_RATIO) });
 };
 
-console.log(`学習済みの逃げるAI(青)が ${SERVER} で赤から逃げます (Ctrl+Cで停止)`);
+console.log(`学習済みの逃げるAI(青、速さ倍率${SPEED_RATIO})が ${SERVER} で赤から逃げます (Ctrl+Cで停止)`);
 
 let warned = false;
 const loop = async (): Promise<void> => {

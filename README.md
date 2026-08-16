@@ -55,10 +55,11 @@ curl http://localhost:3000/state
 
 - `src/rl/evadeEnv.ts` — 2体の`Circle`(runner/chaser)を使う環境。状態は「追手との相対位置」+「上下左右の壁までの距離」。壁までの距離を状態に含めないと、壁際に追い詰められた状況を区別できず簡単に捕まってしまうことが分かったため。壁1pxに近づくごとの小さな減点も加えている(角は2軸分になるのでより不利)。追手(chaser)側の動きは学習済みの`chase`方策を固定で使う
 - `src/rl/trainEvade.ts` — evaderの学習ループ。`SPEED_START`/`SPEED_END`でrunner(青)の速さをchaserの何倍にするか設定できる(カリキュラム学習にも、固定速度での学習にも使える)
-- `src/rl/evade.ts` — 学習済みevadeQtable.jsonで青(player)を操作し、赤から逃げさせる
-- `src/rl/chaseEnv.ts` — evadeEnv.tsと対称の環境。evadeStateは「自分の壁との距離+相手との相対位置」という幾何学的に対称な計算なので、chaser視点でもそのまま使い回せる。evader側の動きは学習済みの`evade`方策を固定で使う
-- `src/rl/trainChase.ts` — chaserの学習ループ。固定相手にした`evadeQtable.json`をどれだけの速さ倍率で使うか設定できる
-- `src/rl/chase.ts` — 学習済みchaseQtable.jsonで赤(enemy)を操作し、青を追いかけさせる
+- `src/rl/evade.ts` — 学習済みevadeQtable.jsonで青(player)を操作し、赤から逃げさせる。第2引数で速さ倍率を指定する(学習時と揃えること)
+- `src/rl/chaseEnv.ts` — evadeEnv.tsと対称の環境。evadeStateは「自分の壁との距離+相手との相対位置」という幾何学的に対称な計算なので、chaser視点でもそのまま使い回せる。evader側の動きは学習済みの`evade`方策を固定で使う。状態には「今のevaderの速さ倍率」も含めており(`chaseState`)、`setEvaderSpeedRange(min, max)`でエピソードごとに速さをランダム化しながら学習できる。同じ位置関係でも相手の速さが違えば別の状態として扱えるので、速さをまたいだ学習で以前起きた「上書きし合う」問題を避けられる
+- `src/rl/trainChase.ts` — chaserの学習ループ
+- `src/rl/trainChaseFocused.ts` — ゼロからではなく既存の`chaseQtable.json`を読み込み、そこから追加学習する。苦手な状況(壁際・角)のスタート確率を`setChaserNearWallProbability`で上げることで重点的に経験を積ませる。全方位からのスタートも一定確率で残しているので、学習の幅自体は狭めない。ある速さ域が伸びる代わりに別の速さ域がわずかに悪化することもあり、追加学習は常に良くなるとは限らない
+- `src/rl/chase.ts` — 学習済みchaseQtable.jsonで赤(enemy)を操作し、青を追いかけさせる。第2引数で「今playerが何倍速で動いているか」を伝える(自動検出はしていないので、evade.tsに渡した値と揃えること)
 
 ```
 npm run train         # 「静止ターゲットに近づく」基礎方策を学習し qtable.json に保存 (このファイルはgitignore対象)
@@ -66,9 +67,10 @@ npm start              # 別ターミナルでサーバーを起動しブラウ�
 npm run play            # 学習済みQテーブルで青(player)を自動操作する
 
 npm run train:evade    # qtable.jsonのchaserを固定相手に、逃げるAIを学習し evadeQtable.json に保存
-npm run evade           # 学習済みevadeQtable.jsonで青(player)に赤から逃げさせる
-npm run train:chase    # evadeQtable.jsonのevaderを固定相手に、追いかけるAIを学習し chaseQtable.json に保存
-npm run chase           # 学習済みchaseQtable.jsonで赤(enemy)に青を追いかけさせる
+npm run evade -- src/rl/evadeQtable.json 2    # 学習済みevadeQtable.jsonで青(player)に赤から逃げさせる(2倍速)
+npm run train:chase    # evadeQtable.jsonのevaderを固定相手に、速さをランダム化しながら追いかけるAIを学習し chaseQtable.json に保存
+npm run train:chase-focused    # 既存のchaseQtable.jsonを読み込み、壁際/角の状況を重点的に追加学習する
+npm run chase -- src/rl/chaseQtable.json 2    # 学習済みchaseQtable.jsonで赤(enemy)に青を追いかけさせる(playerは2倍速と伝える)
 ```
 
 `npm run chase`と`npm run evade`を別ターミナルで同時に動かすと、実際に鬼ごっこが見られる。

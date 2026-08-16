@@ -48,8 +48,9 @@ export class QLearningAgent {
 
   toJSON = (): Record<string, number[]> => Object.fromEntries(this.q);
 
-  static fromJSON(data: Record<string, number[]>): QLearningAgent {
-    const agent = new QLearningAgent(0, 0); // 推論専用なのでalpha/gammaは使わない
+  // alpha/gammaを省略すると推論専用(0,0)になる。学習を続きから再開したい場合は指定する
+  static fromJSON(data: Record<string, number[]>, alpha = 0, gamma = 0): QLearningAgent {
+    const agent = new QLearningAgent(alpha, gamma);
     for (const [state, values] of Object.entries(data)) agent.q.set(state, values);
     return agent;
   }

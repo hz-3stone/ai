@@ -4,7 +4,7 @@ import { EvadeEnv } from './evadeEnv';
 import { QLearningAgent } from './qlearning';
 
 // ==== ハイパーパラメータ (ここをいじって実験する) ====
-const EPISODES = 6000;
+const EPISODES = 10000; // 2倍速は学習が不安定になりやすいので、7倍速の時より多めにする
 const MAX_STEPS = 300; // これだけ生き延びたら「逃げ切り」として打ち切る
 const ALPHA = 0.1;
 const GAMMA = 0.95;
@@ -13,12 +13,11 @@ const EPSILON_MIN = 0.05;
 const EPSILON_DECAY = 0.998;
 const LOG_WINDOW = 100;
 
-// 速さ倍率スイープ(sweep)の結果、7倍速は毎回安定して低い捕獲率に収束することが分かった。
-// まずはこの「学習しやすい速さ」でしっかり学習させる。本番想定の2倍速(捕獲率75%程度、
-// ゲームとして詰まないバランス)は改めて別途取り組む。SPEED_START/ENDを変えれば
-// カリキュラム(徐々に難化)にも戻せる
-const SPEED_START = 7.0;
-const SPEED_END = 7.0;
+// 本番想定の2倍速で学習する。7倍速は「まず動くところまで仕上げる」ための足がかりとして
+// 先に仕上げ済み(evadeQtable.jsonは一旦上書きされる。必要なら学習前に別名で退避すること)。
+// SPEED_START/ENDを変えればカリキュラム(徐々に難化)にも戻せる
+const SPEED_START = 2.0;
+const SPEED_END = 2.0;
 // ====================================================
 
 const env = new EvadeEnv();
