@@ -1,21 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 import { QLearningAgent } from './qlearning';
-import { evadeState } from './evadeEnv';
+import { chaseState } from './chaseEnv';
 
 // 学習済みQテーブルで赤(enemy)に青(player)を追いかけさせる。
-// デフォルトはchaseQtable.json (evadeQtable.jsonの7倍速evaderを固定相手に自己対戦で
-// 鍛え直したchaser)。元のqtable.json (静止ターゲットに近づく方策) を試したい場合は
-// 引数で明示的に指定すること — ただし状態表現(壁情報の有無)が異なるため、
-// qtable.jsonを渡すと状態が噛み合わず正しく動作しない。
+// デフォルトはchaseQtable.json (evaderの速さ2〜7倍をランダム化しながら自己対戦で
+// 鍛え直したchaser。状態に相手の速さも含むため、速い/遅いどちらの相手にも対応できる)。
+// 状態表現が異なるため、元のqtable.jsonを渡しても正しく動作しない。
+// 第2引数で「今playerが何倍速で動いているか」を伝える(自動検出はしていない。
+// evade.tsに渡した速さ倍率と揃えること。省略時は2)。
 // 事前に `npm start` でサーバーを立ち上げ、ブラウザで http://localhost:3000 を開いておくこと。
 const SERVER = 'http://localhost:3000';
 const INTERVAL_MS = 100;
+const PLAYER_SPEED_RATIO = process.argv[3] ? Number(process.argv[3]) : 2;
 
 const qtablePath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, 'chaseQtable.json');
 const qtable = JSON.parse(fs.readFileSync(qtablePath, 'utf8'));
 const agent = QLearningAgent.fromJSON(qtable);
-console.log(`Qテーブル: ${qtablePath}`);
+console.log(`Qテーブル: ${qtablePath} (想定するplayerの速さ倍率: ${PLAYER_SPEED_RATIO})`);
 
 const parseState = (text: string) => {
   const [px, py, ex, ey] = text.split(',').map(Number);
@@ -25,7 +27,8 @@ const parseState = (text: string) => {
 const tick = async (): Promise<void> => {
   const res = await fetch(`${SERVER}/state`);
   const { px, py, ex, ey } = parseState(await res.text());
-  const state = evadeState(ex, ey, px, py); // enemy(自分)の壁との距離 + playerとの相対位置
+  // enemy(自分)の壁との距離 + playerとの相対位置 + playerの速さ倍率
+  const state = chaseState(ex, ey, px, py, PLAYER_SPEED_RATIO);
   const action = agent.chooseAction(state, 0); // epsilon=0: 常に学習済みの最善手
   await fetch(`${SERVER}/move-enemy`, { method: 'POST', body: action });
 };
