@@ -10,7 +10,7 @@ import { QLearningAgent } from './qlearning';
 
 // ==== ハイパーパラメータ ====
 const EPISODES = 50000;
-const MAX_STEPS = 300;
+const MAX_STEPS = 600; // trainChase.tsと揃える(コイン全回収には複数セルの移動が必要なため)
 const ALPHA = 0.1;
 const GAMMA = 0.95;
 const EPSILON_START = 0.4; // 既存の学習を大きく壊さないよう、ゼロからの学習より控えめにする
@@ -35,19 +35,22 @@ env.setChaserNearWallProbability(NEAR_WALL_PROBABILITY);
 let epsilon = EPSILON_START;
 const recentSteps: number[] = [];
 const recentCaught: number[] = [];
+const recentCleared: number[] = []; // evaderが全コイン回収でクリアしたら1、それ以外は0
 
 for (let episode = 1; episode <= EPISODES; episode++) {
   let state = env.reset();
   let steps = 0;
   let caught = 0;
+  let cleared = 0;
 
   for (; steps < MAX_STEPS; steps++) {
     const action = agent.chooseAction(state, epsilon);
-    const { state: nextState, reward, done } = env.step(action);
+    const { state: nextState, reward, done, outcome } = env.step(action);
     agent.update(state, action, reward, nextState);
     state = nextState;
     if (done) {
-      caught = 1;
+      if (outcome === 'caught') caught = 1;
+      if (outcome === 'cleared') cleared = 1;
       steps++;
       break;
     }
@@ -57,13 +60,16 @@ for (let episode = 1; episode <= EPISODES; episode++) {
   if (recentSteps.length > LOG_WINDOW) recentSteps.shift();
   recentCaught.push(caught);
   if (recentCaught.length > LOG_WINDOW) recentCaught.shift();
+  recentCleared.push(cleared);
+  if (recentCleared.length > LOG_WINDOW) recentCleared.shift();
   epsilon = Math.max(EPSILON_MIN, epsilon * EPSILON_DECAY);
 
   if (episode % LOG_WINDOW === 0) {
     const avgSteps = recentSteps.reduce((a, b) => a + b, 0) / recentSteps.length;
     const catchRate = (recentCaught.reduce((a, b) => a + b, 0) / recentCaught.length) * 100;
+    const clearRate = (recentCleared.reduce((a, b) => a + b, 0) / recentCleared.length) * 100;
     console.log(
-      `episode ${episode}\tavg捕獲歩数(直近${LOG_WINDOW}): ${avgSteps.toFixed(1)}\t捕獲成功率: ${catchRate.toFixed(1)}%\tepsilon: ${epsilon.toFixed(3)}\tQテーブルの状態数: ${agent.stateCount}`,
+      `episode ${episode}\tavg決着歩数(直近${LOG_WINDOW}): ${avgSteps.toFixed(1)}\t捕獲成功率: ${catchRate.toFixed(1)}%\tクリア(敗北)率: ${clearRate.toFixed(1)}%\tepsilon: ${epsilon.toFixed(3)}\tQテーブルの状態数: ${agent.stateCount}`,
     );
   }
 }

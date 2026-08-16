@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import readline from 'readline';
 import { Circle, isDirection } from './circle';
+import { allTaken, collect, createCoins } from './coins';
 import { SpawnPoint } from './spawnPoint';
 
 try {
@@ -29,8 +30,10 @@ class Broadcaster {
   };
 }
 
-// 固定の可動範囲 (画面サイズに依存しない)。マップは元の25倍(縦横5倍)。
-const WIDTH = 2000, HEIGHT = 2000, R = 20, STEP = 4, MIN_DISTANCE = 1000;
+// 固定の可動範囲 (画面サイズに依存しない)。マップは元の4倍(縦横2倍)。
+// 2000x2000(25倍)は視界(400x400相当)に対して広すぎて「発見」自体が学習できなかったため、
+// 一旦800x800まで狭めて再挑戦する
+const WIDTH = 800, HEIGHT = 800, R = 20, STEP = 4, MIN_DISTANCE = 400;
 const TOUCH_DISTANCE = R * 2; // 円同士の半径がぶつかる距離
 
 const player = new Circle(WIDTH, HEIGHT, R, STEP); // 青: プレイヤー操作 (HTML/POST /move)
@@ -45,33 +48,48 @@ const respawnEnemy = (): void => {
 };
 respawnEnemy();
 
+// マス目1つに1枚、青(player)が集める。全部集めたらクリアとして次のラウンドへ続ける
+let coins = createCoins(WIDTH, HEIGHT, R);
+
 const broadcaster = new Broadcaster();
 
 const touching = (): boolean =>
   Math.hypot(player.x - enemy.x, player.y - enemy.y) <= TOUCH_DISTANCE;
 
-// "px,py,ex,ey" の4値だけの軽量表現
-const state = (): string => `${player.toText()},${enemy.toText()}`;
+// px,py,ex,ey + コイン一覧(可変長・構造化データなのでJSON)
+const state = (): string =>
+  JSON.stringify({ px: player.x, py: player.y, ex: enemy.x, ey: enemy.y, coins });
+
+const collectCoinsForPlayer = (): void => {
+  if (collect(player.x, player.y, R, coins) && allTaken(coins)) {
+    coins = createCoins(WIDTH, HEIGHT, R); // クリア: 新しいコインで次のラウンドへ続ける
+  }
+};
 
 // raw は "3" のような単発でも "3377..." のようなバッチでもよい。
 // 不正な文字は無視するだけで、1リクエストにまとめるほど通信回数が減って軽くなる。
 // player/enemy どちらの移動で触れても、赤(enemy)を再配置する(赤がまた追いかけ直す)
-const makeMoveHandler = (mover: Circle) => (raw: string): string => {
+const makeMoveHandler = (mover: Circle, onMoved?: () => void) => (raw: string): string => {
   for (let i = 0; i < raw.length; i++) {
     const dir = raw[i];
     if (!isDirection(dir)) continue;
     mover.move(dir);
     if (touching()) respawnEnemy();
+    onMoved?.();
   }
   const text = state();
   broadcaster.send(text);
   return text;
 };
 
-const handlePlayerMove = makeMoveHandler(player);
+const handlePlayerMove = makeMoveHandler(player, collectCoinsForPlayer); // コインを集めるのは青だけ
 const handleEnemyMove = makeMoveHandler(enemy);
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'));
+// ハンバーガーメニュー(視点切り替え)はAIの挙動を観察するデバッグ機能なので、
+// 通常プレイでは隠す。.envや `DEBUG_VIEW=1 npm start` で有効化できるようにする
+const DEBUG_VIEW = Boolean(process.env.DEBUG_VIEW);
+const rawHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+const html = DEBUG_VIEW ? rawHtml.replace('data-debug-view="false"', 'data-debug-view="true"') : rawHtml;
 
 const requestListener = (req: http.IncomingMessage, res: http.ServerResponse): void => {
   if (req.url === '/events') {

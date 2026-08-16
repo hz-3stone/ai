@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Coin } from '../coins';
 import { QLearningAgent } from './qlearning';
 import { chaseState } from './chaseEnv';
 
@@ -19,16 +20,14 @@ const qtable = JSON.parse(fs.readFileSync(qtablePath, 'utf8'));
 const agent = QLearningAgent.fromJSON(qtable);
 console.log(`Qテーブル: ${qtablePath} (想定するplayerの速さ倍率: ${PLAYER_SPEED_RATIO})`);
 
-const parseState = (text: string) => {
-  const [px, py, ex, ey] = text.split(',').map(Number);
-  return { px, py, ex, ey };
-};
+const parseState = (text: string): { px: number; py: number; ex: number; ey: number; coins: Coin[] } =>
+  JSON.parse(text);
 
 const tick = async (): Promise<void> => {
   const res = await fetch(`${SERVER}/state`);
-  const { px, py, ex, ey } = parseState(await res.text());
-  // enemy(自分)の壁との距離 + playerとの相対位置 + playerの速さ倍率
-  const state = chaseState(ex, ey, px, py, PLAYER_SPEED_RATIO);
+  const { px, py, ex, ey, coins } = parseState(await res.text());
+  // enemy(自分)の壁との距離 + playerとの相対位置 + playerの速さ倍率 + コインの状況
+  const state = chaseState(ex, ey, px, py, PLAYER_SPEED_RATIO, coins);
   const action = agent.chooseAction(state, 0); // epsilon=0: 常に学習済みの最善手
   await fetch(`${SERVER}/move-enemy`, { method: 'POST', body: action });
 };

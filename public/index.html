@@ -10,18 +10,26 @@ canvas{display:block;width:100vw;height:100vh;object-fit:contain;background:#e6d
 #stick{position:fixed;right:16px;bottom:16px;width:130px;height:130px;border-radius:50%;background:#0002;touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;background:#0004}
 
-#menuButton{position:fixed;right:14px;top:14px;width:48px;height:48px;border:none;border-radius:10px;background:#0007;color:#fff;font-size:22px;line-height:48px;padding:0;cursor:pointer}
+#menuButton{display:none;position:fixed;right:14px;top:14px;width:48px;height:48px;border:none;border-radius:10px;background:#0007;color:#fff;font-size:22px;line-height:48px;padding:0;cursor:pointer}
+body[data-debug-view="true"] #menuButton{display:block}
 #viewMenu{position:fixed;right:14px;top:68px;display:none;flex-direction:column;gap:6px;background:#0007;padding:8px;border-radius:10px}
 #viewMenu.open{display:flex}
 #viewMenu button{font:inherit;font-size:15px;padding:12px 16px;min-height:44px;border:none;border-radius:8px;background:#fff2;color:#fff;cursor:pointer;text-align:right}
 #viewMenu button[aria-pressed="true"]{background:#7fc4e8;color:#1a1a1a}
 
+#minimap{position:fixed;left:14px;top:14px;width:120px;height:120px;border-radius:8px;background:rgba(0,0,0,0.35);image-rendering:pixelated}
+
+#clearBanner{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:15vmin;font-weight:bold;color:#f0b429;text-shadow:0 0 6px #0009,0 0 2px #0009;opacity:0;pointer-events:none;transition:opacity 0.3s}
+#clearBanner.show{opacity:1}
+
 h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 </style>
 </head>
-<body>
+<body data-debug-view="false">
 <h1>丸移動</h1>
 <canvas id="c"></canvas>
+<canvas id="minimap"></canvas>
+<div id="clearBanner">CLEAR!</div>
 <button id="menuButton" type="button" aria-expanded="false" aria-label="視点メニュー">&#9776;</button>
 <div id="viewMenu">
   <button id="viewPlayer" type="button" aria-pressed="true">青視点</button>
@@ -30,9 +38,9 @@ h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 </div>
 <div id="stick"><div id="knob"></div></div>
 <script>
-// move.ts の固定値と同じ。マップは可動範囲全体、キャンバスは見える窓(カメラ視点)のサイズ
-const MAP_W = 2000, MAP_H = 2000, VIEW_W = 400, VIEW_H = 400, R = 20;
-const CAMERA_LAG = 0.1; // 追従カメラが目標に近づく割合 (毎フレーム)
+// move.ts の固定値と同じ。マップは可動範囲全体、キャンバスは見える窓(カメラ視点)のサイズ。
+// 2000x2000(25倍)は視界に対して広すぎたため、一旦800x800(4倍)まで狭めている
+const MAP_W = 800, MAP_H = 800, VIEW_W = 400, VIEW_H = 400, R = 20;
 
 const cv = document.getElementById('c');
 cv.width = VIEW_W;
@@ -75,10 +83,15 @@ plank(UNIT * 1.5, UNIT * 1.5, 45);
 
 const floorPattern = ctx.createPattern(tileCanvas, 'repeat');
 
-// move.ts から届く "px,py,ex,ey" を保持するだけ。描画はrequestAnimationFrame側で行う
+// move.ts から届く状態(px,py,ex,ey,coins)を保持するだけ。描画はrequestAnimationFrame側で行う
 let px = MAP_W / 2, py = MAP_H / 2, ex = px, ey = py;
+let coins = [];
 new EventSource('/events').onmessage = e => {
-  [px, py, ex, ey] = e.data.split(',').map(Number);
+  const data = JSON.parse(e.data);
+  px = data.px; py = data.py; ex = data.ex; ey = data.ey;
+  coins = data.coins;
+  drawMinimap();
+  if (data.cleared) showClearBanner();
 };
 
 // 追従カメラ(青視点/赤視点)は「動き続けている間はデッドゾーンの端に留まり続け、
@@ -125,11 +138,58 @@ const drawCharacter = (x, y, r, color) => {
   }
 };
 
-const drawDot = (x, y, r, color) => {
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
+const drawDot = (targetCtx, x, y, r, color) => {
+  targetCtx.beginPath();
+  targetCtx.arc(x, y, r, 0, Math.PI * 2);
+  targetCtx.fillStyle = color;
+  targetCtx.fill();
+};
+
+// コインは塗り色が床と近くても輪郭でくっきり見えるよう、太めの縁取りを付ける
+const drawCoin = (targetCtx, x, y, r) => {
+  targetCtx.beginPath();
+  targetCtx.arc(x, y, r, 0, Math.PI * 2);
+  targetCtx.fillStyle = '#ffcc33';
+  targetCtx.fill();
+  targetCtx.lineWidth = Math.max(1, r * 0.3);
+  targetCtx.strokeStyle = '#8a5a00';
+  targetCtx.stroke();
+};
+
+// 画面左上固定のミニマップ。俯瞰モード以外(=通常プレイ)でだけ意味があるので、
+// 表示/非表示の切り替えはsetViewMode側で行う。コインの位置と自分(青)の位置だけを見せる
+// (敵の位置は出さない。プレイヤー視点の視界制限と矛盾させないため)
+const MINIMAP_SIZE = 120; // 長辺をこの大きさにする
+const minimapW = MAP_W >= MAP_H ? MINIMAP_SIZE : Math.round(MINIMAP_SIZE * (MAP_W / MAP_H));
+const minimapH = MAP_H >= MAP_W ? MINIMAP_SIZE : Math.round(MINIMAP_SIZE * (MAP_H / MAP_W));
+const minimapCanvas = document.getElementById('minimap');
+minimapCanvas.width = minimapW;
+minimapCanvas.height = minimapH;
+const mctx = minimapCanvas.getContext('2d');
+mctx.imageSmoothingEnabled = false;
+
+const drawMinimap = () => {
+  mctx.clearRect(0, 0, minimapW, minimapH);
+  const sx = minimapW / MAP_W, sy = minimapH / MAP_H;
+  let remaining = 0;
+  for (const coin of coins) {
+    if (coin.taken) continue;
+    remaining++;
+    drawCoin(mctx, coin.x * sx, coin.y * sy, 4);
+  }
+  drawDot(mctx, px * sx, py * sy, 5, '#2a78d6');
+
+  mctx.fillStyle = '#fff';
+  mctx.font = '10px sans-serif';
+  mctx.fillText(`${remaining}/${coins.length}`, 4, minimapH - 4);
+};
+
+const clearBanner = document.getElementById('clearBanner');
+let clearBannerTimer = null;
+const showClearBanner = () => {
+  clearBanner.classList.add('show');
+  clearTimeout(clearBannerTimer);
+  clearBannerTimer = setTimeout(() => clearBanner.classList.remove('show'), 1500);
 };
 
 const draw = () => {
@@ -139,8 +199,11 @@ const draw = () => {
     ctx.fillStyle = FLOOR_BASE;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     const scale = VIEW_W / MAP_W;
-    drawDot(ex * scale, ey * scale, Math.max(2, R * scale), '#c73e3e');
-    drawDot(px * scale, py * scale, Math.max(2, R * scale), '#2a78d6');
+    for (const coin of coins) {
+      if (!coin.taken) drawCoin(ctx, coin.x * scale, coin.y * scale, Math.max(2, R * scale * 0.4));
+    }
+    drawDot(ctx, ex * scale, ey * scale, Math.max(2, R * scale), '#c73e3e');
+    drawDot(ctx, px * scale, py * scale, Math.max(2, R * scale), '#2a78d6');
   } else {
     const targetX = viewMode === 'enemy' ? ex : px;
     const targetY = viewMode === 'enemy' ? ey : py;
@@ -193,6 +256,10 @@ const draw = () => {
     ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
     ctx.restore();
 
+    for (const coin of coins) {
+      if (!coin.taken) drawCoin(ctx, coin.x - offsetX, coin.y - offsetY, R * 0.3);
+    }
+
     drawCharacter(ex - offsetX, ey - offsetY, R, '#c73e3e');
     drawCharacter(px - offsetX, py - offsetY, R, '#2a78d6');
   }
@@ -220,6 +287,7 @@ menuButton.addEventListener('click', () => {
 
 const setViewMode = (mode) => {
   viewMode = mode;
+  minimapCanvas.style.display = mode === 'overview' ? 'none' : 'block'; // 俯瞰は主画面が既に全体図なので隠す
   if (mode !== 'overview') {
     // 視点切り替え時は、離れた地点へゆっくりパンしてしまわないよう即座にスナップする
     const targetX = mode === 'enemy' ? ex : px;
