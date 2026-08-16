@@ -6,8 +6,8 @@ const TOUCH_DISTANCE = R * 2;
 const BUCKET = 20; // dx,dy をこの幅で離散化する (状態数を絞るためのパラメータ)
 
 // 学習(env.ts)と推論(play.ts)で同じ状態表現を使うための共通関数
-export const relativeState = (dx: number, dy: number): string =>
-  `${Math.round(dx / BUCKET)},${Math.round(dy / BUCKET)}`;
+export const relativeState = (dx: number, dy: number, bucket: number = BUCKET): string =>
+  `${Math.round(dx / bucket)},${Math.round(dy / bucket)}`;
 
 const STEP_REWARD = -1;
 const GOAL_REWARD = 100;
