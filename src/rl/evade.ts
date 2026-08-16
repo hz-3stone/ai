@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Coin } from '../coins';
 import { QLearningAgent } from './qlearning';
 import { evadeState } from './evadeEnv';
 
@@ -16,15 +17,13 @@ const qtable = JSON.parse(fs.readFileSync(qtablePath, 'utf8'));
 const agent = QLearningAgent.fromJSON(qtable);
 console.log(`Qテーブル: ${qtablePath}`);
 
-const parseState = (text: string) => {
-  const [px, py, ex, ey] = text.split(',').map(Number);
-  return { px, py, ex, ey };
-};
+const parseState = (text: string): { px: number; py: number; ex: number; ey: number; coins: Coin[] } =>
+  JSON.parse(text);
 
 const tick = async (): Promise<void> => {
   const res = await fetch(`${SERVER}/state`);
-  const { px, py, ex, ey } = parseState(await res.text());
-  const state = evadeState(px, py, ex, ey);
+  const { px, py, ex, ey, coins } = parseState(await res.text());
+  const state = evadeState(px, py, ex, ey, coins);
   const action = agent.chooseAction(state, 0); // epsilon=0: 常に学習済みの最善手
   await fetch(`${SERVER}/move`, { method: 'POST', body: action.repeat(SPEED_RATIO) });
 };

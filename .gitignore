@@ -7,3 +7,6 @@ src/rl/comparison-log.json
 src/rl/snapshots/
 src/rl/evadeQtable.json
 src/rl/chaseQtable.json
+src/rl/coinQtable*.json
+src/rl/coinStuckScenarios*.json
+src/rl/coinFailures.json

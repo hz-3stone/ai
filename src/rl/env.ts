@@ -14,8 +14,13 @@ export const relativeState = (dx: number, dy: number, bucket: number = BUCKET): 
 // 相手が視界外にいる間は状態が爆発しないようにする(範囲外は全部「見えていない」1状態に潰す)
 export const VISIBILITY_HALF = 200;
 
+// 見えているかどうかは相対位置(dx,dy)だけで決まるので、自分視点でも相手視点でも結果は同じ
+// (符号が違うだけでabsを取るため)。「発見/見失い」の報酬シェーピングにも使い回す
+export const isVisible = (dx: number, dy: number): boolean =>
+  Math.abs(dx) <= VISIBILITY_HALF && Math.abs(dy) <= VISIBILITY_HALF;
+
 export const visibleRelativeState = (dx: number, dy: number, bucket: number = BUCKET): string => {
-  if (Math.abs(dx) > VISIBILITY_HALF || Math.abs(dy) > VISIBILITY_HALF) return 'none';
+  if (!isVisible(dx, dy)) return 'none';
   return relativeState(dx, dy, bucket);
 };
 

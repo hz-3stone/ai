@@ -4,6 +4,12 @@ export type Direction = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7';
 export const isDirection = (v: string): v is Direction =>
   v.length === 1 && v >= '0' && v <= '7';
 
+// 直前と正反対の方向(上下入れ替え等)を選ぶと実質その場に足踏みしてしまうため、
+// 「足踏み」を検知する報酬シェーピングで使う
+export const OPPOSITE_DIRECTION: Record<Direction, Direction> = {
+  '0': '1', '1': '0', '2': '3', '3': '2', '4': '7', '7': '4', '5': '6', '6': '5',
+};
+
 export class Circle {
   x: number;
   y: number;
