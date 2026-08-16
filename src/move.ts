@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import readline from 'readline';
 import { Circle, isDirection } from './circle';
-import { Target } from './target';
+import { SpawnPoint } from './spawnPoint';
 
 try {
   process.loadEnvFile(); // .env があれば読み込む (無くてもエラーにしない)
@@ -36,8 +36,8 @@ const TOUCH_DISTANCE = R * 2; // 円同士の半径がぶつかる距離
 const player = new Circle(WIDTH, HEIGHT, R, STEP); // 青: プレイヤー操作 (HTML/POST /move)
 const enemy = new Circle(WIDTH, HEIGHT, R, STEP); // 赤: AI/CLI操作 (POST /move-enemy。HTMLからは操作できない)
 
-// enemyの配置(初期位置・触れた後の再配置)はTargetの配置ルールを流用する
-const enemySpawn = new Target(WIDTH, HEIGHT, R);
+// enemyの配置(初期位置・触れた後の再配置)にSpawnPointを使う
+const enemySpawn = new SpawnPoint(WIDTH, HEIGHT, R);
 const respawnEnemy = (): void => {
   enemySpawn.randomize(player.x, player.y, MIN_DISTANCE); // 現在地から一定以上離れた場所に出現
   enemy.x = enemySpawn.x;
