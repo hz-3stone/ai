@@ -6,6 +6,8 @@
     "sim": "tsx src/sim.ts",
     "train": "tsx src/rl/train.ts",
     "play": "tsx src/rl/play.ts",
+    "compare": "tsx src/rl/compare.ts",
+    "compare:snapshots": "tsx src/rl/compareSnapshots.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:html": "markuplint public/index.html"

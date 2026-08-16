@@ -3,3 +3,5 @@ dist/
 .env
 src/rl/qtable.json
 src/rl/training-log.json
+src/rl/comparison-log.json
+src/rl/snapshots/
