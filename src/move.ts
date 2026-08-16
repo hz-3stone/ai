@@ -31,29 +31,37 @@ class Broadcaster {
 
 // 固定の可動範囲 (画面サイズに依存しない)
 const WIDTH = 400, HEIGHT = 400, R = 20, STEP = 4, MIN_DISTANCE = 200;
+const TOUCH_DISTANCE = R * 2; // 円同士の半径がぶつかる距離
 
 const player = new Circle(WIDTH, HEIGHT, R, STEP); // 青: プレイヤー操作 (HTML/POST /move)
 const enemy = new Circle(WIDTH, HEIGHT, R, STEP); // 赤: AI/CLI操作 (POST /move-enemy。HTMLからは操作できない)
 
-// enemyの初期位置だけ、プレイヤーから離れた場所にする (Targetの配置ルールを流用)
-{
-  const spawn = new Target(WIDTH, HEIGHT, R);
-  spawn.randomize(player.x, player.y, MIN_DISTANCE);
-  enemy.x = spawn.x;
-  enemy.y = spawn.y;
-}
+// enemyの配置(初期位置・触れた後の再配置)はTargetの配置ルールを流用する
+const enemySpawn = new Target(WIDTH, HEIGHT, R);
+const respawnEnemy = (): void => {
+  enemySpawn.randomize(player.x, player.y, MIN_DISTANCE); // 現在地から一定以上離れた場所に出現
+  enemy.x = enemySpawn.x;
+  enemy.y = enemySpawn.y;
+};
+respawnEnemy();
 
 const broadcaster = new Broadcaster();
+
+const touching = (): boolean =>
+  Math.hypot(player.x - enemy.x, player.y - enemy.y) <= TOUCH_DISTANCE;
 
 // "px,py,ex,ey" の4値だけの軽量表現
 const state = (): string => `${player.toText()},${enemy.toText()}`;
 
 // raw は "3" のような単発でも "3377..." のようなバッチでもよい。
 // 不正な文字は無視するだけで、1リクエストにまとめるほど通信回数が減って軽くなる。
+// player/enemy どちらの移動で触れても、赤(enemy)を再配置する(赤がまた追いかけ直す)
 const makeMoveHandler = (mover: Circle) => (raw: string): string => {
   for (let i = 0; i < raw.length; i++) {
     const dir = raw[i];
-    if (isDirection(dir)) mover.move(dir);
+    if (!isDirection(dir)) continue;
+    mover.move(dir);
+    if (touching()) respawnEnemy();
   }
   const text = state();
   broadcaster.send(text);
